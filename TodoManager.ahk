@@ -12,6 +12,10 @@
 
 try DllCall("SetProcessDPIAware")
 
+; --- Tray Menu ---
+A_TrayMenu.Delete()
+A_TrayMenu.Add("Exit", (*) => OnGuiClose())
+
 ; ---------- Logging ----------
 global LOG_ERRORS := A_ScriptDir "\\errors.log"
 global LOG_DEBUG  := A_ScriptDir "\\debug.log"
