@@ -309,7 +309,7 @@ IsDesktopActive() {
     
     return hwnd = shell
   } catch as e {
-    LogError(Format("IsDesktopActive: {1}", e.Message))
+    ;LogError(Format("IsDesktopActive: {1}", e.Message))
   }
   return false
 }
