@@ -16,6 +16,9 @@ try DllCall("SetProcessDPIAware")
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Exit", (*) => OnGuiClose())
 
+; No Icon
+;#NoTrayIcon
+
 ; ---------- Logging ----------
 global LOG_ERRORS := A_ScriptDir "\\errors.log"
 global LOG_DEBUG  := A_ScriptDir "\\debug.log"
@@ -145,6 +148,8 @@ global isRestoring := true
 global COL_W_IND := 80, COL_MIN_TITLE := 120
 ; Padding around the ListView control (not items)
 global LV_PAD_X := 5
+; Visual left padding after checkbox before the title text
+global TITLE_LEFT_PAD := "  "
 
 ; Build GUI
 
@@ -158,11 +163,15 @@ mainGui.BackColor := "FFFFFF"
 ; Toolbar row
 BuildToolbar()
 
-; ListView (todo first, indicator second; priority only in indicator)
-lv := mainGui.Add("ListView", "x" . LV_PAD_X " y+5 w420 h400 Grid -Multi -Hdr", ["Todo", ""]) ; header hidden
+; ListView (checkbox + todo first, indicator second; priority only in indicator)
+lv := mainGui.Add("ListView", "x" . LV_PAD_X " y+5 w420 h400 Grid -Multi -Hdr Checked", ["Todo", ""]) ; header hidden, with checkboxes
 lv.SetFont("s" config["font_size"]) ; font size applies to list items
+; Ensure checkbox style is applied (some environments require explicit Opt)
+; Ensure checkbox style is applied
+lv.Opt("+Checked")
 lv.OnEvent("DoubleClick", (*) => EditSelected())
 lv.OnEvent("Click", (*) => UpdateToolbarEnabled())
+lv.OnEvent("ItemCheck", OnListItemCheck)
 
 ; Status bar
 sb := mainGui.Add("StatusBar")
@@ -215,7 +224,7 @@ BuildToolbar() {
   toolbar["add"]    := makeTxt("E710", "Add", (*) => AddTodo(),  "2E8B57")  ; green
   toolbar["edit"]   := makeTxt("E70F", "Edit", (*) => EditSelected(), "1E90FF") ; blue
   toolbar["prio"]   := makeTxt("E7C1", "Priority", (*) => SetPriority(), "FF8C00") ; orange
-  toolbar["done"]   := makeTxt("E73E", "Complete", (*) => CompleteSelected(), "2E8B57") ; green
+  ; Removed: complete button (handled via list checkboxes)
   toolbar["up"]     := makeTxt("E74A", "Move Up", (*) => MoveSelected(-1), "808080") ; gray
   toolbar["down"]   := makeTxt("E74B", "Move Down", (*) => MoveSelected(1),  "808080") ; gray
   toolbar["del"]    := makeTxt("E74D", "Delete", (*) => DeleteSelected(), "DC143C") ; crimson
@@ -264,7 +273,6 @@ UpdateToolbarEnabled() {
   setColor(toolbar["add"],  "2E8B57")
   setColor(toolbar["edit"], hasSel ? "1E90FF" : "C0C0C0")
   setColor(toolbar["prio"], hasSel ? "FF8C00" : "C0C0C0")
-  setColor(toolbar["done"], hasSel ? "2E8B57" : "C0C0C0")
   setColor(toolbar["up"],   hasSel ? "808080" : "C0C0C0")
   setColor(toolbar["down"], hasSel ? "808080" : "C0C0C0")
   setColor(toolbar["del"],  hasSel ? "DC143C" : "C0C0C0")
@@ -605,16 +613,31 @@ RefreshList() {
           ind := ind != "" ? ind . " 📝" : "📝"
       }
 
-      ; Prepend completed icon when done
+      ; Completed icon removed; completion is indicated via checkbox and strikethrough
       if (t.Has("completed") && t["completed"]) {
         ind := ind != "" ? "✅ " . ind : "✅"
       }
 
       title := t["title"]
 
+      ; Strip leading completed icon from indicator if present (checkboxes now handle completion)
+      if (t.Has("completed") && t["completed"]) {
+        try {
+          sp := InStr(ind, " ")
+          if (sp > 0)
+            ind := SubStr(ind, sp + 1)
+          else
+            ind := ""
+        } catch as e {
+          LogError(Format("Strip completed icon: {1}", e.Message))
+        }
+      }
+
       if t.Has("completed") && t["completed"]
         title := StrikeText(title)
-      lv.Add(, title, ind)
+      displayTitle := TITLE_LEFT_PAD . title
+      opts := (t.Has("completed") && t["completed"]) ? "Check" : ""
+      lv.Add(opts, displayTitle, ind)
     }
 
 
@@ -644,6 +667,31 @@ UpdateCounts() {
 SelectedIndex() {
   global lv
   return lv.GetNext()
+}
+
+; Handle checkbox toggles for completion
+OnListItemCheck(ctrl, row, checked) {
+  global todos
+  try {
+    idx := row + 0
+    if (idx <= 0 || idx > todos.Length)
+      return
+    curr := todos[idx]
+    newDone := (checked ? true : false)
+    oldDone := curr.Has("completed") && curr["completed"]
+    if (newDone = oldDone)
+      return
+    curr["completed"] := newDone
+    if (newDone) {
+      ; push completed to bottom
+      t := todos.RemoveAt(idx)
+      todos.Push(t)
+    }
+    SaveState()
+    RefreshList()
+  } catch as e {
+    LogError(Format("OnListItemCheck: {1}", e.Message))
+  }
 }
 
 AddTodo() {
@@ -806,29 +854,7 @@ ApplyPrio(p) {
   }
 }
 
-CompleteSelected() {
-  global todos
-  idx := SelectedIndex()
-  if idx <= 0
-    return
-  try {
-    curr := todos[idx]
-    isDone := curr.Has("completed") && curr["completed"]
-    if isDone {
-      curr["completed"] := false
-      ; keep position when un-completing
-    } else {
-      curr["completed"] := true
-      ; push completed to bottom
-      t := todos.RemoveAt(idx)
-      todos.Push(t)
-    }
-    SaveState()
-    RefreshList()
-  } catch as e {
-    LogError(Format("CompleteSelected: {1}", e.Message))
-  }
-}
+; Removed: CompleteSelected() — replaced by OnListItemCheck via list checkboxes
 
 MoveSelected(dir) {
   global todos
