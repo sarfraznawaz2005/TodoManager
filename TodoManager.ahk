@@ -285,28 +285,28 @@ IsDesktopActive() {
     hwnd := WinActive("A")
     if (hwnd = mainGui.Hwnd)
       return true
-      
+
     if !hwnd {
       ; No active window, treat as desktop
       ; return true
     }
-    
+
     cls := WinGetClass("ahk_id " hwnd)
     if (cls = "WorkerW" || cls = "Progman" cls = "XamlExplorerHostIslandWindow" || cls = "DesktopWindowXamlSource")
       return true
-    
+
     ; Fallback: window under mouse is a desktop host
     MouseGetPos(, , &wID)
-    
+
     if wID {
       c2 := WinGetClass("ahk_id " wID)
-      
+
       if (c2 = "WorkerW" || c2 = "Progman")
         return true
     }
-    
+
     shell := DllCall("GetShellWindow", "ptr")
-    
+
     return hwnd = shell
   } catch as e {
     ;LogError(Format("IsDesktopActive: {1}", e.Message))
