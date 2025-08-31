@@ -409,7 +409,7 @@ AdjustListColumnsFromWidth(totalW) {
 
   try {
     listW := totalW - (2 * LV_PAD_X)
-    fixed := COL_W_IND + 8 ; padding for scrollbar/margins
+    fixed := COL_W_IND + 20 ; padding for scrollbar/margins
     titleW := listW - fixed
 
     if (titleW < COL_MIN_TITLE)
