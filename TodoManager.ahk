@@ -184,7 +184,7 @@ BuildToolbar()
 
 ; ListView (checkbox + todo first, indicator second; priority only in indicator)
 lv := mainGui.Add("ListView", "x" . LV_PAD_X " y+5 w420 h400 Grid -Multi -Hdr Checked", ["Todo", ""]) ; header hidden, with checkboxes
-lv.SetFont("s" config["font_size"]) ; font size applies to list items
+lv.SetFont("s" config["font_size"] " q5", "Calibri") ; font size applies to list items
 ; Ensure checkbox style is applied (some environments require explicit Opt)
 ; Ensure checkbox style is applied
 lv.Opt("+Checked")
@@ -673,7 +673,7 @@ AddTodo() {
       if (c != "")
         item["comments"] := c
     }
-    todos.Push(item)
+    todos.InsertAt(1, item)
     SaveState()
     RefreshList()
 
