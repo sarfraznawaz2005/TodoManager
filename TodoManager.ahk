@@ -141,11 +141,11 @@ global toolbar := Map()
 global toolbarTips := Map()
 global icon_font := "Segoe MDL2 Assets"
 global hovering := false
-global desktop_visible := false
+
 global edge_margin := 8
 global isRestoring := true
 ; Fixed widths for non-title columns in ListView (priority merged into indicator)
-global COL_W_IND := 80, COL_MIN_TITLE := 120
+global COL_W_IND := 50, COL_MIN_TITLE := 120
 ; Padding around the ListView control (not items)
 global LV_PAD_X := 5
 ; Visual left padding after checkbox before the title text
@@ -153,9 +153,28 @@ global TITLE_LEFT_PAD := "  "
 
 ; Build GUI
 
-mainGui := Gui()
-; Hide from taskbar/Alt-Tab with +ToolWindow; keep borderless, resizable, always-on-top
-mainGui.Opt("-Caption +AlwaysOnTop +Resize +ToolWindow") ; borderless; resizable; hidden from taskbar
+GetDesktopWindowHandle() {
+    ; Get the handle to the desktop shell window. This is generally more reliable.
+    desktopHwnd := DllCall("GetShellWindow")
+    
+    ; If GetShellWindow fails for some reason, fall back to WinExist.
+    if !desktopHwnd {
+        desktopHwnd := WinExist("ahk_class WorkerW")
+    }
+    if !desktopHwnd {
+        desktopHwnd := WinExist("ahk_class Progman", "Program Manager")
+    }
+    
+    return desktopHwnd
+}
+
+desktopHwnd := GetDesktopWindowHandle()
+if (!desktopHwnd) {
+    LogError("Could not find desktop window handle for parenting the TodoManager GUI. Exiting.")
+    ExitApp()
+}
+
+mainGui := Gui("+Parent" . desktopHwnd . " -Caption +AlwaysOnTop +Resize +ToolWindow")
 mainGui.MarginX := 6
 mainGui.MarginY := 6
 mainGui.BackColor := "FFFFFF"
@@ -200,7 +219,7 @@ UpdateToolbarEnabled()
 OnExit(SaveOnExit)
 
 ; Timers
-SetTimer(CheckDesktopActive, 200)
+
 SetTimer(CheckHover, 200)
 ; (reminders removed)
 
@@ -278,72 +297,7 @@ UpdateToolbarEnabled() {
   setColor(toolbar["del"],  hasSel ? "DC143C" : "C0C0C0")
 }
 
-; ---------- Desktop visibility ----------
-IsDesktopActive() {
-  global mainGui
-  try {
-    hwnd := WinActive("A")
-    if (hwnd = mainGui.Hwnd)
-      return true
 
-    if !hwnd {
-      ; No active window, treat as desktop
-      ; return true
-    }
-
-    cls := WinGetClass("ahk_id " hwnd)
-    if (cls = "WorkerW" || cls = "Progman" cls = "XamlExplorerHostIslandWindow" || cls = "DesktopWindowXamlSource")
-      return true
-
-    ; Fallback: window under mouse is a desktop host
-    MouseGetPos(, , &wID)
-
-    if wID {
-      c2 := WinGetClass("ahk_id " wID)
-
-      if (c2 = "WorkerW" || c2 = "Progman")
-        return true
-    }
-
-    shell := DllCall("GetShellWindow", "ptr")
-
-    return hwnd = shell
-  } catch as e {
-    ;LogError(Format("IsDesktopActive: {1}", e.Message))
-  }
-  return false
-}
-
-CheckDesktopActive() {
-  global mainGui, desktop_visible, lastNonDesktopHwnd
-  hwnd := WinActive("A")
-  isDesk := IsDesktopActive()
-
-  if !isDesk {
-    try {
-      if (hwnd && hwnd != mainGui.Hwnd) {
-        cls := WinGetClass("ahk_id " hwnd)
-        shell := DllCall("GetShellWindow", "ptr")
-        if (cls != "WorkerW" && cls != "Progman" && hwnd != shell)
-          lastNonDesktopHwnd := hwnd
-      }
-    } catch {
-    }
-  }
-
-  if isDesk && !desktop_visible {
-    ; Only show; position handled at startup or by user
-    mainGui.Show("NoActivate")
-    ApplyDim(true) ; ensure dim applied after showing
-    desktop_visible := true
-    WinGetPos(&sx, &sy, &sw, &sh, mainGui.Hwnd)
-
-  } else if !isDesk && desktop_visible {
-    mainGui.Hide()
-    desktop_visible := false
-
-  }
-}
 
 ; ---------- Dimming / Hover ----------
 ApplyDim(dim := true) {
@@ -361,8 +315,11 @@ IsMouseOverGui() {
   global mainGui
 
   try {
-    MouseGetPos(, , &wID, , 2)
-    return wID = mainGui.Hwnd
+    MouseGetPos(&mx, &my) ; Get mouse coordinates
+    WinGetPos(&wx, &wy, &ww, &wh, mainGui.Hwnd) ; Get GUI position and size
+
+    ; Check if mouse coordinates are within GUI bounds
+    return (mx >= wx && mx < (wx + ww) && my >= wy && my < (wy + wh))
   } catch {
     return false
   }
@@ -374,10 +331,10 @@ CheckHover() {
   over := IsMouseOverGui()
   focused := WinActive("A") = mainGui.Hwnd
 
-  if (over || focused) && !hovering {
+  if (over) && !hovering {
     hovering := true
     ApplyDim(false)
-  } else if !(over || focused) && hovering {
+  } else if !(over) && hovering {
     hovering := false
     ApplyDim(true)
   }
@@ -503,8 +460,9 @@ PlaceTopRight(mon := 0) {
       rx := Min(Max(rx, L2), R2 - rw)
       ry := Min(Max(ry, T2), B2 - rh)
 
-      mainGui.Show(Format("x{1} y{2} w{3} h{4} NoActivate Hide", rx, ry, rw, rh))
+      mainGui.Show(Format("x{1} y{2} w{3} h{4} NoActivate", rx, ry, rw, rh))
       WinMove(rx, ry, rw, rh, mainGui.Hwnd)
+      ApplyDim(true)
       WinGetPos(&arx, &ary, &arw, &arh, mainGui.Hwnd)
 
       ; Update in-memory only; persistence happens on user move/resize
@@ -523,6 +481,7 @@ PlaceTopRight(mon := 0) {
     mainGui.Show(Format("x{1} y{2} w{3} h{4} NoActivate Hide", x, y, w, h))
     Sleep 50
     WinMove(x, y, w, h, mainGui.Hwnd)
+    ApplyDim(true)
 
     ; Persist once so next run restores these
     config["win_x"] := x, config["win_y"] := y, config["win_w"] := w, config["win_h"] := h
