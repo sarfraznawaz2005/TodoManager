@@ -14,6 +14,7 @@ try DllCall("SetProcessDPIAware")
 
 ; --- Tray Menu ---
 A_TrayMenu.Delete()
+A_TrayMenu.Add("Reload", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => OnGuiClose())
 
 ; No Icon
@@ -154,6 +155,45 @@ global TITLE_LEFT_PAD := "  "
 ; Build GUI
 
 GetDesktopWindowHandle() {
+    ; Ensure Explorer's WorkerW layer exists
+    progman := WinExist("ahk_class Progman")
+    if progman {
+        ; 0x052C is the "spawn WorkerW" message Progman listens for
+        DllCall("user32\SendMessageTimeout"
+            , "ptr",  progman
+            , "uint", 0x052C
+            , "ptr",  0
+            , "ptr",  0
+            , "uint", 0x0002    ; SMTO_BLOCK
+            , "uint", 1000
+            , "ptr*", 0)
+    }
+
+    ; Give Explorer a moment to build WorkerW
+    WinWait("ahk_class WorkerW",, 1)
+
+    ; We want the WorkerW that *doesn’t* host SHELLDLL_DefView (that one is behind icons),
+    ; OR fall back sensibly if not found yet.
+    hwndToUse := 0
+    for hwnd in WinGetList("ahk_class WorkerW") {
+        if !WinExist("ahk_class SHELLDLL_DefView", "ahk_id " hwnd) {
+            hwndToUse := hwnd
+            break
+        }
+    }
+
+    ; Fallbacks if needed
+    if !hwndToUse
+        hwndToUse := WinExist("ahk_class WorkerW")
+    if !hwndToUse
+        hwndToUse := WinExist("ahk_class Progman")
+    if !hwndToUse
+        hwndToUse := DllCall("GetShellWindow", "ptr")
+
+    return hwndToUse
+}
+
+GetDesktopWindowHandleV1() {
     ; Get the handle to the desktop shell window. This is generally more reliable.
     desktopHwnd := DllCall("GetShellWindow")
     
@@ -168,13 +208,17 @@ GetDesktopWindowHandle() {
     return desktopHwnd
 }
 
-desktopHwnd := GetDesktopWindowHandle()
+desktopHwnd := GetDesktopWindowHandleV1()
 if (!desktopHwnd) {
     LogError("Could not find desktop window handle for parenting the TodoManager GUI. Exiting.")
     ExitApp()
 }
 
-mainGui := Gui("+Parent" . desktopHwnd . " -Caption +AlwaysOnTop +Resize +ToolWindow")
+mainGui := Gui("-Caption +AlwaysOnTop +Resize +ToolWindow")
+mainGui.Opt("+E0x08000000")
+
+DllCall("user32\SetParent", "ptr", mainGui.Hwnd, "ptr", desktopHwnd)
+
 mainGui.MarginX := 6
 mainGui.MarginY := 6
 mainGui.BackColor := "FFFFFF"
@@ -206,9 +250,8 @@ OnMessage(0x84, OnNcHitTest) ; WM_NCHITTEST
 OnMessage(0x0232, OnExitSizeMove) ; WM_EXITSIZEMOVE
 ; Toolbar hover tooltips
 OnMessage(0x200, OnAnyMouseMove) ; WM_MOUSEMOVE
-
-
 OnMessage(0x0216, OnWmMoving) ; WM_MOVING
+
 ; Initial placement top-right based on preferred monitor
 PlaceTopRight(PreferredMonitorIndex())
 isRestoring := false
@@ -218,9 +261,7 @@ UpdateToolbarEnabled()
 OnExit(SaveOnExit)
 
 ; Timers
-
 SetTimer(CheckHover, 200)
-; (reminders removed)
 
 ; ---------- Toolbar ----------
 BuildToolbar() {
@@ -295,8 +336,6 @@ UpdateToolbarEnabled() {
   setColor(toolbar["down"], hasSel ? "808080" : "C0C0C0")
   setColor(toolbar["del"],  hasSel ? "DC143C" : "C0C0C0")
 }
-
-
 
 ; ---------- Dimming / Hover ----------
 ApplyDim(dim := true) {
@@ -459,11 +498,11 @@ PlaceTopRight(mon := 0) {
       rx := Min(Max(rx, L2), R2 - rw)
       ry := Min(Max(ry, T2), B2 - rh)
 
-      mainGui.Show(Format("x{1} y{2} w{3} h{4} NoActivate", rx, ry, rw, rh))
+      mainGui.Show(Format("x{1} y{2} w{3} h{4}", rx, ry, rw, rh))
       WinMove(rx, ry, rw, rh, mainGui.Hwnd)
       ApplyDim(true)
       WinGetPos(&arx, &ary, &arw, &arh, mainGui.Hwnd)
-
+		
       ; Update in-memory only; persistence happens on user move/resize
       config["win_x"] := arx, config["win_y"] := ary, config["win_w"] := arw, config["win_h"] := arh
       return
@@ -713,7 +752,7 @@ EditSelected() {
 OpenTodoDialog(mode := "add", initialTitle := "", initialComments := "") {
   global mainGui
   try {
-    g := Gui("+Owner" mainGui.Hwnd " -MinimizeBox -MaximizeBox")
+    g := Gui("-MinimizeBox -MaximizeBox")
     g.MarginX := 14, g.MarginY := 14
     g.BackColor := "FFFFFF"
 
@@ -861,7 +900,8 @@ DeleteSelected() {
 OpenSettings() {
   global config, lv, mainGui
   try {
-    g := Gui("+Owner" mainGui.Hwnd " -MinimizeBox -MaximizeBox")
+    g := Gui("-MinimizeBox -MaximizeBox")
+    
     g.MarginX := 12, g.MarginY := 12
     g.Add("Text", , "Font Size (8-28):")
   ; Numeric-only with UpDown spinner and range clamp
