@@ -193,7 +193,7 @@ GetDesktopWindowHandle() {
     return hwndToUse
 }
 
-GetDesktopWindowHandleV1() {
+GetDesktopWindowHandleV0() {
     ; Get the handle to the desktop shell window. This is generally more reliable.
     desktopHwnd := DllCall("GetShellWindow")
     
@@ -208,7 +208,7 @@ GetDesktopWindowHandleV1() {
     return desktopHwnd
 }
 
-desktopHwnd := GetDesktopWindowHandleV1()
+desktopHwnd := GetDesktopWindowHandle()
 if (!desktopHwnd) {
     LogError("Could not find desktop window handle for parenting the TodoManager GUI. Exiting.")
     ExitApp()
@@ -522,8 +522,7 @@ PlaceTopRight(mon := 0) {
       h := 700
     x := R2 - w, y := T2
 
-    mainGui.Show(Format("x{1} y{2} w{3} h{4} NoActivate Hide", x, y, w, h))
-    Sleep 50
+    mainGui.Show(Format("x{1} y{2} w{3} h{4}", x, y, w, h))
     WinMove(x, y, w, h, mainGui.Hwnd)
     ApplyDim(true)
 
