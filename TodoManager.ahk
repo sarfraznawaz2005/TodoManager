@@ -464,6 +464,12 @@ AdjustListColumnsFromWidth(totalW) {
 PlaceTopRight(mon := 0) {
   global mainGui, config
 
+
+  ; auto-reload in case explorer is re-started
+  static __last:=0
+  OnMessage(DllCall("RegisterWindowMessage","str","TaskbarCreated","uint"), (*) => (A_TickCount-__last<5000?0:(__last:=A_TickCount, SetTimer(() => Reload(), -750))))
+
+
   try {
     ; Resolve monitor to use
     if (mon <= 0) {
