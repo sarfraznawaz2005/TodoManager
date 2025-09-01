@@ -26,7 +26,7 @@ try FileDelete(LOG_ERRORS)
 try FileDelete(LOG_DEBUG)
 
 LogDebug(msg) {
-  FileAppend(Format("[{1}] DEBUG: {2}\r\n", A_Now, msg), LOG_DEBUG)
+  ;FileAppend(Format("[{1}] DEBUG: {2}\r\n", A_Now, msg), LOG_DEBUG)
 }
 LogError(msg) {
   FileAppend(Format("[{1}] ERROR: {2}\r\n", A_Now, msg), LOG_ERRORS)
@@ -200,7 +200,6 @@ sb.SetText("Pending: 0 | Completed: 0 | Total: 0")
 ; Resize handling (persist size), ESC to hide
 mainGui.OnEvent("Size", OnGuiSize)
 mainGui.OnEvent("Close", OnGuiClose)
-mainGui.OnEvent("Escape", (*) => mainGui.Hide())
 
 ; Borderless drag and resize
 OnMessage(0x84, OnNcHitTest) ; WM_NCHITTEST
